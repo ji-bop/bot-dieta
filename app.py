@@ -9,6 +9,10 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
+@app.route('/', methods=['GET'])
+def ping():
+    return "Bot online!", 200
+
 # --- CONFIGURAÇÕES E CHAVES ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
