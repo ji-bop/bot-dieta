@@ -142,6 +142,12 @@ def webhook():
             f"⚖️ *Déficit:* {total_kcal} - {int(tmb_usuario)} = *{deficit} kcal*"
         )
 
+        resposta = model.generate_content(prompt)
+        dados_ia = json.loads(resposta.text.strip())
+        
+        # --- ADICIONE ESTA LINHA: ---
+        print(f"DADOS BRUTOS DA IA: {dados_ia}")
+        
         enviar_mensagem_whatsapp(remetente, mensagem_final)
 
     except Exception as e:
