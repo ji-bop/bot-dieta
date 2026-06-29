@@ -43,6 +43,8 @@ def verify():
         return request.args.get("hub.challenge")
     return "Falha na verificação", 403
 
+
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
@@ -53,10 +55,14 @@ def webhook():
         msg_info = data['entry'][0]['changes'][0]['value']['messages'][0]
         remetente = msg_info['from']
         texto_usuario = msg_info['text']['body']
-        print(f"DEBUG: Remetente={remetente}, Texto={texto_usuario}")
+        
+        # DEBUG: Imprime para vermos se ele acha o usuário
+        print(f"DEBUG: Processando mensagem de {remetente}")
         
         user_check = supabase.table("usuarios").select("*").eq("telefone", remetente).eq("ativo", True).execute()
+        
         if not user_check.data:
+            print(f"ERRO: Usuário {remetente} não encontrado ou inativo no Supabase.")
             return jsonify({"status": "unauthorized"}), 200
             
         tmb_usuario = user_check.data[0].get("tmb", 1905)
@@ -87,9 +93,10 @@ def webhook():
                f"🎯 *Total hoje:* {total_kcal} kcal (Déficit: {deficit})")
 
         enviar_mensagem_whatsapp(remetente, msg)
+        
     except Exception as e:
-        print(f"Erro crítico: {e}")
+        print(f"ERRO CRÍTICO NO PROCESSAMENTO: {e}")
+        # AGORA O BOT VAI TE AVISAR NO WHATSAPP SE DER ERRO
+        enviar_mensagem_whatsapp(remetente, f"⚠️ Erro do sistema: {str(e)[:100]}")
+        
     return jsonify({"status": "success"}), 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
