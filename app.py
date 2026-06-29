@@ -104,12 +104,9 @@ def webhook():
         tmb_usuario = usuario.get("tmb", 1905) # Puxa o valor da coluna nova (fallback 1905 se estiver nulo)
 
         # 2. INTELIGÊNCIA: Gemini configurado para responder nativamente em JSON
+        # 2. INTELIGÊNCIA: Gemini configurado para responder nativamente em JSON
         model = genai.GenerativeModel(
-<<<<<<< HEAD
-            'gemini-1.5-flash', 
-=======
             'gemini-2.5-flash', 
->>>>>>> 241d24c264c7097ecf596a069aeb08fe64ddadfc
             system_instruction=SYSTEM_PROMPT,
             generation_config={"response_mime_type": "application/json"}
         )
@@ -128,11 +125,10 @@ def webhook():
         }
         supabase.table("logs_consumo").insert(nova_refeicao).execute()
 
-        # 4. MATEMÁTICA COM FUSO HORÁRIO: Define início do dia no fuso local com offset correto
+        # 4. MATEMÁTICA COM FUSO HORÁRIO
         agora_local = datetime.now(LOCAL_TZ)
         inicio_dia_iso = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
         
-        # Filtra os logs a partir da meia-noite do fuso local
         logs_hoje = supabase.table("logs_consumo").select("calorias").eq("user_id", remetente).gte("created_at", inicio_dia_iso).execute()
         
         total_kcal = sum(int(item['calorias']) for item in logs_hoje.data)
@@ -147,13 +143,6 @@ def webhook():
             f"🎯 *Total hoje:* {total_kcal} kcal\n"
             f"⚖️ *Déficit:* {total_kcal} - {int(tmb_usuario)} = *{deficit} kcal*"
         )
-
-
-        resposta = model.generate_content(prompt)
-        dados_ia = json.loads(resposta.text.strip())
-        
-        # --- ADICIONE ESTA LINHA: ---
-        print(f"DADOS BRUTOS DA IA: {dados_ia}")
         
         enviar_mensagem_whatsapp(remetente, mensagem_final)
 
