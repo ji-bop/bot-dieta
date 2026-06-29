@@ -9,7 +9,11 @@ import google.generativeai as genai
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÕES ---
+@app.route('/', methods=['GET'])
+def ping():
+    return "Bot online!", 200
+
+# --- CONFIGURAÇÕES E CHAVES ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 META_TOKEN = os.environ.get("META_TOKEN")
@@ -31,7 +35,7 @@ def enviar_mensagem_whatsapp(to_number, texto):
     try:
         requests.post(url_meta, headers=headers, json=payload, timeout=10)
     except Exception as e:
-        print(f"Erro ao enviar: {e}")
+        print(f"Erro ao conectar com a API da Meta: {e}")
 
 @app.route('/webhook', methods=['GET'])
 def verify():
@@ -43,12 +47,17 @@ def verify():
 def webhook():
     data = request.json
     try:
+        if 'messages' not in data['entry'][0]['changes'][0]['value']:
+            return jsonify({"status": "ignored"}), 200
+        
         msg_info = data['entry'][0]['changes'][0]['value']['messages'][0]
         remetente = msg_info['from']
         texto_usuario = msg_info['text']['body']
         
         user_check = supabase.table("usuarios").select("*").eq("telefone", remetente).eq("ativo", True).execute()
-        if not user_check.data: return jsonify({"status": "unauthorized"}), 200
+        if not user_check.data:
+            return jsonify({"status": "unauthorized"}), 200
+            
         tmb_usuario = user_check.data[0].get("tmb", 1905)
 
         model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_PROMPT, generation_config={"response_mime_type": "application/json"})
@@ -57,21 +66,28 @@ def webhook():
         macros = dados['macros']
 
         supabase.table("logs_consumo").insert({
-            "user_id": remetente, "alimento": ", ".join(dados['itens']),
-            "calorias": macros['calorias'], "proteinas": macros['proteinas'],
-            "carboidratos": macros['carboidratos'], "gorduras": macros['gorduras']
+            "user_id": remetente,
+            "alimento": ", ".join(dados['itens']),
+            "calorias": macros.get('calorias', 0),
+            "proteinas": macros.get('proteinas', 0),
+            "carboidratos": macros.get('carboidratos', 0),
+            "gorduras": macros.get('gorduras', 0)
         }).execute()
 
         agora_local = datetime.now(LOCAL_TZ)
         inicio_dia = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
         logs = supabase.table("logs_consumo").select("calorias").eq("user_id", remetente).gte("created_at", inicio_dia).execute()
         
-        total = sum(int(item['calorias']) for item in logs.data)
-        msg = f"🍽️ {dados['refeicao']}\n{', '.join(dados['itens'])}\n\n🔥 {macros['calorias']} kcal (P:{macros['proteinas']} C:{macros['carboidratos']} G:{macros['gorduras']})\n🎯 Total hoje: {total} kcal (Déficit: {total - int(tmb_usuario)})"
-        
+        total_kcal = sum(int(item['calorias']) for item in logs.data)
+        deficit = total_kcal - int(tmb_usuario)
+
+        msg = (f"🍽️ *{dados.get('refeicao', 'Refeição')}*\n{', '.join(dados['itens'])}\n\n"
+               f"🔥 *{macros.get('calorias', 0)} kcal* (P:{macros.get('proteinas', 0)} C:{macros.get('carboidratos', 0)} G:{macros.get('gorduras', 0)})\n"
+               f"🎯 *Total hoje:* {total_kcal} kcal (Déficit: {deficit})")
+
         enviar_mensagem_whatsapp(remetente, msg)
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"Erro crítico: {e}")
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
