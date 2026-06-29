@@ -53,6 +53,7 @@ def webhook():
         msg_info = data['entry'][0]['changes'][0]['value']['messages'][0]
         remetente = msg_info['from']
         texto_usuario = msg_info['text']['body']
+        print(f"DEBUG: Remetente={remetente}, Texto={texto_usuario}")
         
         user_check = supabase.table("usuarios").select("*").eq("telefone", remetente).eq("ativo", True).execute()
         if not user_check.data:
