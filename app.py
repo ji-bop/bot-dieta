@@ -25,7 +25,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 LOCAL_TZ = pytz.timezone('America/Campo_Grande')
 
-SYSTEM_PROMPT = """Você é um nutricionista especialista. Retorne EXATAMENTE um objeto JSON válido (sem markdown).
+SYSTEM_PROMPT = """Você é um nutricionista especialista. 
+Se o usuário relatar uma refeição, calcule as calorias e macros positivos.
+Se o usuário relatar um EXERCÍCIO FÍSICO (ex: 'corri 5km', 'musculação'), coloque a refeição como 'Treino', macros zerados, e as calorias devem ser NEGATIVAS (ex: -300).
+Retorne EXATAMENTE um objeto JSON válido.
 Formato: {"refeicao": "...", "itens": [...], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
 
 def enviar_mensagem_whatsapp(to_number, texto):
