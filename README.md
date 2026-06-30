@@ -1,4 +1,4 @@
-# 🍏 NutriBot - Assistente de Dieta via WhatsApp
+# 🍏 FoodLog - Assistente de Dieta via WhatsApp
 
 Um chatbot integrado ao WhatsApp para registro prático de refeições e treinos. O sistema utiliza Inteligência Artificial para extrair calorias e macronutrientes de mensagens em texto livre e mantém o controle do saldo calórico diário do usuário.
 
