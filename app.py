@@ -79,4 +79,95 @@ def webhook():
         if texto_usuario_lower.startswith("!meta ") or texto_usuario_lower.startswith("meta "):
             try:
                 partes = texto_usuario_lower.split(" ")
-                nova_tmb = int(partes
+                nova_tmb = int(partes[1])
+                
+                resultado = supabase.table("usuarios").update({"tmb": nova_tmb}).eq("telefone", remetente).execute()
+                
+                if resultado.data:
+                    enviar_mensagem_whatsapp(remetente, f"🎯 Sua nova meta diária foi atualizada para {nova_tmb} kcal!")
+                else:
+                    enviar_mensagem_whatsapp(remetente, "⚠️ Usuário não encontrado no banco para atualização.")
+                
+                return jsonify({"status": "success"}), 200
+            except (ValueError, IndexError):
+                enviar_mensagem_whatsapp(remetente, "⚠️ Formato inválido. Use: *!meta 2000* (exemplo).")
+                return jsonify({"status": "success"}), 200
+        # ----------------------------------------
+        
+        # --- INTERCEPTAÇÃO DO COMANDO EXTRATO ---
+        comandos_extrato = ["extrato", "resumo", "diario", "diário"]
+        if texto_usuario_lower in comandos_extrato:
+            agora_local = datetime.now(LOCAL_TZ)
+            inicio_dia = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            
+            logs = supabase.table("logs_consumo").select("*").eq("user_id", remetente).gte("created_at", inicio_dia).order("created_at").execute()
+            
+            if not logs.data:
+                enviar_mensagem_whatsapp(remetente, "📭 Seu extrato de hoje está vazio. Mande a primeira refeição!")
+                return jsonify({"status": "success"}), 200
+                
+            linhas_extrato = ["📊 *Extrato do Dia*\n"]
+            for log in logs.data:
+                try:
+                    hora_utc = datetime.fromisoformat(log['created_at'].replace('Z', '+00:00'))
+                    hora_str = hora_utc.astimezone(LOCAL_TZ).strftime('%H:%M')
+                except:
+                    hora_str = "--:--"
+                
+                sinal = "+" if log['calorias'] > 0 else ""
+                linhas_extrato.append(f"• {hora_str} - {log['alimento']} ({sinal}{log['calorias']} kcal)")
+                
+            mensagem_extrato = "\n".join(linhas_extrato)
+            enviar_mensagem_whatsapp(remetente, mensagem_extrato)
+            return jsonify({"status": "success"}), 200
+        # ----------------------------------------
+
+        model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYSTEM_PROMPT, generation_config={"response_mime_type": "application/json"})
+        resposta_ia = model.generate_content(texto_usuario)
+        dados = json.loads(resposta_ia.text)
+        macros = dados['macros']
+
+        supabase.table("logs_consumo").insert({
+            "user_id": remetente,
+            "alimento": ", ".join(dados['itens']),
+            "calorias": macros.get('calorias', 0),
+            "proteinas": macros.get('proteinas', 0),
+            "carboidratos": macros.get('carboidratos', 0),
+            "gorduras": macros.get('gorduras', 0)
+        }).execute()
+
+        agora_local = datetime.now(LOCAL_TZ)
+        inicio_dia = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        
+        logs = supabase.table("logs_consumo").select("calorias, proteinas, carboidratos, gorduras").eq("user_id", remetente).gte("created_at", inicio_dia).execute()
+        
+        # Proteção contra NoneType nos macros
+        total_kcal = sum(int(item.get('calorias') or 0) for item in logs.data)
+        total_p = sum(int(item.get('proteinas') or 0) for item in logs.data)
+        total_c = sum(int(item.get('carboidratos') or 0) for item in logs.data)
+        total_g = sum(int(item.get('gorduras') or 0) for item in logs.data)
+        
+        meta_diaria = int(tmb_usuario)
+        restam = meta_diaria - total_kcal
+        
+        if restam >= 0:
+            msg_saldo = f"restam {restam} kcal"
+        else:
+            msg_saldo = f"você passou do saldo do dia em {abs(restam)} kcal"
+
+        icone = "🏃" if macros.get('calorias', 0) < 0 else "✅"
+
+        msg = (
+            f"{icone} {dados.get('refeicao', 'Registro')} ({macros.get('calorias', 0)} kcal) salvo.\n"
+            f"Saldo do dia: {total_kcal}/{meta_diaria} kcal — {msg_saldo}.\n"
+            f"P: {total_p}g | C: {total_c}g | G: {total_g}g.\n\n"
+            f"💡 Digite \"extrato\" para ver o dia completo."
+        )
+
+        enviar_mensagem_whatsapp(remetente, msg)
+        
+    except Exception as e:
+        print(f"ERRO CRÍTICO NO PROCESSAMENTO: {e}")
+        enviar_mensagem_whatsapp(remetente, f"⚠️ Erro do sistema: {str(e)[:100]}")
+        
+    return jsonify({"status": "success"}), 200
