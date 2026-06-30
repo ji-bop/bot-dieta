@@ -30,6 +30,13 @@ Formato: {"refeicao": "...", "itens": [...], "macros": {"calorias": 0, "proteina
 
 def enviar_mensagem_whatsapp(to_number, texto):
     """Função auxiliar para envio de mensagens via API da Meta"""
+    
+    # --- CORREÇÃO DO 9º DÍGITO (BRASIL) ---
+    if to_number.startswith("55") and len(to_number) == 12:
+        to_number = to_number[:4] + "9" + to_number[4:]
+        print(f"DEBUG: Número corrigido para envio: {to_number}")
+    # --------------------------------------
+    
     url_meta = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {META_TOKEN}", "Content-Type": "application/json"}
     payload = {
@@ -41,7 +48,6 @@ def enviar_mensagem_whatsapp(to_number, texto):
     print(f"DEBUG: Tentando enviar mensagem para {to_number}...")
     try:
         response = requests.post(url_meta, headers=headers, json=payload, timeout=10)
-        # Isso vai imprimir o que a Meta respondeu (ou o erro) no seu Log do Render
         print(f"DEBUG: Resposta da Meta (Status {response.status_code}): {response.text}")
     except Exception as e:
         print(f"ERRO CRÍTICO NO ENVIO: {e}")
