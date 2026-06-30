@@ -1,4 +1,4 @@
-import os
+
 import json
 import requests
 from datetime import datetime
@@ -82,7 +82,19 @@ def webhook():
             return jsonify({"status": "unauthorized"}), 200
             
         tmb_usuario = user_check.data[0].get("tmb", 1905)
-
+        
+        # --- ATUALIZAÇÃO DE TMB (META) ---
+        if texto_usuario_lower.startswith("!meta ") or texto_usuario_lower.startswith("meta "):
+            try:
+                nova_tmb = int(texto_usuario_lower.split(" ")[1])
+                supabase.table("usuarios").update({"tmb": nova_tmb}).eq("telefone", remetente).execute()
+                enviar_mensagem_whatsapp(remetente, f"🎯 Sua nova meta diária foi atualizada para {nova_tmb} kcal!")
+                return jsonify({"status": "success"}), 200
+            except ValueError:
+                enviar_mensagem_whatsapp(remetente, "⚠️ Formato inválido. Use: *meta 2000* (substituindo pelo valor desejado).")
+                return jsonify({"status": "success"}), 200
+        # ----------------------------------------
+        
         # --- INTERCEPTAÇÃO DO COMANDO EXTRATO ---
         comandos_extrato = ["extrato", "resumo", "diario", "diário"]
         if texto_usuario_lower in comandos_extrato:
