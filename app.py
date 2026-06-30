@@ -67,7 +67,7 @@ def webhook():
             
         tmb_usuario = user_check.data[0].get("tmb", 1905)
 
-        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=SYSTEM_PROMPT, generation_config={"response_mime_type": "application/json"})
+        model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYSTEM_PROMPT, generation_config={"response_mime_type": "application/json"})
         resposta_ia = model.generate_content(texto_usuario)
         dados = json.loads(resposta_ia.text)
         macros = dados['macros']
