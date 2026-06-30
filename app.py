@@ -28,7 +28,7 @@ LOCAL_TZ = pytz.timezone('America/Campo_Grande')
 SYSTEM_PROMPT = """Você é um nutricionista especialista. 
 Se o usuário relatar uma refeição, calcule as calorias e macros positivos.
 Se o usuário relatar um EXERCÍCIO FÍSICO (ex: 'corri 5km', 'musculação'), coloque a refeição como 'Treino', macros zerados, e as calorias devem ser NEGATIVAS (ex: -300).
-Retorne EXATAMENTE um objeto JSON válido.
+Retorne EXATAMENTE um objeto JSON válido (sem markdown).
 Formato: {"refeicao": "...", "itens": [...], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
 
 def enviar_mensagem_whatsapp(to_number, texto):
@@ -61,8 +61,6 @@ def verify():
         return request.args.get("hub.challenge")
     return "Falha na verificação", 403
 
-
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
@@ -73,8 +71,8 @@ def webhook():
         msg_info = data['entry'][0]['changes'][0]['value']['messages'][0]
         remetente = msg_info['from']
         texto_usuario = msg_info['text']['body']
+        texto_usuario_lower = texto_usuario.lower().strip()
         
-        # DEBUG: Imprime para vermos se ele acha o usuário
         print(f"DEBUG: Processando mensagem de {remetente}")
         
         user_check = supabase.table("usuarios").select("*").eq("telefone", remetente).eq("ativo", True).execute()
@@ -85,6 +83,36 @@ def webhook():
             
         tmb_usuario = user_check.data[0].get("tmb", 1905)
 
+        # --- INTERCEPTAÇÃO DO COMANDO EXTRATO ---
+        comandos_extrato = ["extrato", "resumo", "diario", "diário"]
+        if texto_usuario_lower in comandos_extrato:
+            agora_local = datetime.now(LOCAL_TZ)
+            inicio_dia = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            
+            logs = supabase.table("logs_consumo").select("*").eq("user_id", remetente).gte("created_at", inicio_dia).order("created_at").execute()
+            
+            if not logs.data:
+                enviar_mensagem_whatsapp(remetente, "📭 Seu extrato de hoje está vazio. Mande a primeira refeição!")
+                return jsonify({"status": "success"}), 200
+                
+            linhas_extrato = ["📊 *Extrato do Dia*\n"]
+            for log in logs.data:
+                # Tratamento de horário para o fuso local
+                try:
+                    hora_utc = datetime.fromisoformat(log['created_at'].replace('Z', '+00:00'))
+                    hora_str = hora_utc.astimezone(LOCAL_TZ).strftime('%H:%M')
+                except:
+                    hora_str = "--:--"
+                
+                sinal = "+" if log['calorias'] > 0 else ""
+                linhas_extrato.append(f"• {hora_str} - {log['alimento']} ({sinal}{log['calorias']} kcal)")
+                
+            mensagem_extrato = "\n".join(linhas_extrato)
+            enviar_mensagem_whatsapp(remetente, mensagem_extrato)
+            return jsonify({"status": "success"}), 200
+        # ----------------------------------------
+
+        # Se não for extrato, processa a refeição/treino via IA
         model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYSTEM_PROMPT, generation_config={"response_mime_type": "application/json"})
         resposta_ia = model.generate_content(texto_usuario)
         dados = json.loads(resposta_ia.text)
@@ -101,20 +129,38 @@ def webhook():
 
         agora_local = datetime.now(LOCAL_TZ)
         inicio_dia = agora_local.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-        logs = supabase.table("logs_consumo").select("calorias").eq("user_id", remetente).gte("created_at", inicio_dia).execute()
         
-        total_kcal = sum(int(item['calorias']) for item in logs.data)
-        deficit = total_kcal - int(tmb_usuario)
+        # Busca todos os macros do dia para somar
+        logs = supabase.table("logs_consumo").select("calorias, proteinas, carboidratos, gorduras").eq("user_id", remetente).gte("created_at", inicio_dia).execute()
+        
+        total_kcal = sum(int(item.get('calorias', 0)) for item in logs.data)
+        total_p = sum(int(item.get('proteinas', 0)) for item in logs.data)
+        total_c = sum(int(item.get('carboidratos', 0)) for item in logs.data)
+        total_g = sum(int(item.get('gorduras', 0)) for item in logs.data)
+        
+        meta_diaria = int(tmb_usuario)
+        restam = meta_diaria - total_kcal
+        
+        # Tom neutro e controle de saldo negativo
+        if restam >= 0:
+            msg_saldo = f"restam {restam} kcal"
+        else:
+            msg_saldo = f"você passou do saldo do dia em {abs(restam)} kcal"
 
-        msg = (f"🍽️ *{dados.get('refeicao', 'Refeição')}*\n{', '.join(dados['itens'])}\n\n"
-               f"🔥 *{macros.get('calorias', 0)} kcal* (P:{macros.get('proteinas', 0)} C:{macros.get('carboidratos', 0)} G:{macros.get('gorduras', 0)})\n"
-               f"🎯 *Total hoje:* {total_kcal} kcal (Déficit: {deficit})")
+        # Adiciona um ícone diferente se for exercício (calorias negativas)
+        icone = "🏃" if macros.get('calorias', 0) < 0 else "✅"
+
+        msg = (
+            f"{icone} {dados.get('refeicao', 'Registro')} ({macros.get('calorias', 0)} kcal) salvo.\n"
+            f"Saldo do dia: {total_kcal}/{meta_diaria} kcal — {msg_saldo}.\n"
+            f"P: {total_p}g | C: {total_c}g | G: {total_g}g.\n\n"
+            f"💡 Digite \"extrato\" para ver o dia completo."
+        )
 
         enviar_mensagem_whatsapp(remetente, msg)
         
     except Exception as e:
         print(f"ERRO CRÍTICO NO PROCESSAMENTO: {e}")
-        # AGORA O BOT VAI TE AVISAR NO WHATSAPP SE DER ERRO
         enviar_mensagem_whatsapp(remetente, f"⚠️ Erro do sistema: {str(e)[:100]}")
         
     return jsonify({"status": "success"}), 200
