@@ -29,13 +29,22 @@ SYSTEM_PROMPT = """Você é um nutricionista especialista. Retorne EXATAMENTE um
 Formato: {"refeicao": "...", "itens": [...], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
 
 def enviar_mensagem_whatsapp(to_number, texto):
+    """Função auxiliar para envio de mensagens via API da Meta"""
     url_meta = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {META_TOKEN}", "Content-Type": "application/json"}
-    payload = {"messaging_product": "whatsapp", "to": to_number, "text": {"body": texto}}
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "text": {"body": texto}
+    }
+    
+    print(f"DEBUG: Tentando enviar mensagem para {to_number}...")
     try:
-        requests.post(url_meta, headers=headers, json=payload, timeout=10)
+        response = requests.post(url_meta, headers=headers, json=payload, timeout=10)
+        # Isso vai imprimir o que a Meta respondeu (ou o erro) no seu Log do Render
+        print(f"DEBUG: Resposta da Meta (Status {response.status_code}): {response.text}")
     except Exception as e:
-        print(f"Erro ao conectar com a API da Meta: {e}")
+        print(f"ERRO CRÍTICO NO ENVIO: {e}")
 
 @app.route('/webhook', methods=['GET'])
 def verify():
