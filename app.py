@@ -29,7 +29,8 @@ SYSTEM_PROMPT = """Você é um nutricionista especialista.
 Se o usuário relatar uma refeição, calcule as calorias e macros positivos.
 Se o usuário relatar um EXERCÍCIO FÍSICO (ex: 'corri 5km', 'musculação'), coloque a refeição como 'Treino', macros zerados, e as calorias devem ser NEGATIVAS (ex: -300).
 Retorne EXATAMENTE um objeto JSON válido (sem markdown).
-Formato: {"refeicao": "...", "itens": [...], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
+A chave 'itens' deve ser UMA LISTA DE STRINGS (textos simples), nunca objetos ou dicionários.
+Formato OBRIGATÓRIO: {"refeicao": "Café da Manhã", "itens": ["1 banana", "25g aveia", "2 ovos"], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
 
 def enviar_mensagem_whatsapp(to_number, texto):
     """Função auxiliar para envio de mensagens via API da Meta"""
@@ -127,9 +128,12 @@ def webhook():
         dados = json.loads(resposta_ia.text)
         macros = dados['macros']
 
+        # Se a IA mandar um dict por acidente, transformamos em string para não quebrar o bot
+        itens_seguros = [str(item) if not isinstance(item, dict) else " ".join(str(v) for v in item.values()) for item in dados.get('itens', [])]
+
         supabase.table("logs_consumo").insert({
             "user_id": remetente,
-            "alimento": ", ".join(dados['itens']),
+            "alimento": ", ".join(itens_seguros),
             "calorias": macros.get('calorias', 0),
             "proteinas": macros.get('proteinas', 0),
             "carboidratos": macros.get('carboidratos', 0),
