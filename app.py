@@ -29,8 +29,8 @@ SYSTEM_PROMPT = """Você é um nutricionista especialista.
 Se o usuário relatar uma refeição, calcule as calorias e macros positivos.
 Se o usuário relatar um EXERCÍCIO FÍSICO (ex: 'corri 5km', 'musculação'), coloque a refeição como 'Treino', macros zerados, e as calorias devem ser NEGATIVAS (ex: -300).
 Retorne EXATAMENTE um objeto JSON válido (sem markdown).
-A chave 'itens' deve ser UMA LISTA DE STRINGS (textos simples), nunca objetos ou dicionários.
-Formato OBRIGATÓRIO: {"refeicao": "Café da Manhã", "itens": ["1 banana", "25g aveia", "2 ovos"], "macros": {"calorias": 0, "proteinas": 0, "carboidratos": 0, "gorduras": 0, "fibras": 0}}"""
+A chave 'itens' deve ser UMA LISTA DE STRINGS. Cada string deve conter a quantidade (em gramas ou unidades), o nome do alimento e as calorias estimadas daquela porção.
+Formato OBRIGATÓRIO: {"refeicao": "Café da Manhã", "itens": ["1 banana média - 90g (80 kcal)", "25g aveia (98 kcal)", "2 ovos - 100g (150 kcal)"], "macros": {"calorias": 328, "proteinas": 17, "carboidratos": 45, "gorduras": 12, "fibras": 5}}"""
 
 def enviar_mensagem_whatsapp(to_number, texto):
     """Função auxiliar para envio de mensagens via API da Meta"""
@@ -116,7 +116,11 @@ def webhook():
                     hora_str = "--:--"
                 
                 sinal = "+" if log['calorias'] > 0 else ""
-                linhas_extrato.append(f"• {hora_str} - {log['alimento']} ({sinal}{log['calorias']} kcal)")
+                
+                # Formata a string de alimentos para pular linha e adicionar o traço
+                alimentos_formatados = log['alimento'].replace(", ", "\n  - ")
+                
+                linhas_extrato.append(f"• *{hora_str}* | {sinal}{log['calorias']} kcal\n  - {alimentos_formatados}\n")
                 
             mensagem_extrato = "\n".join(linhas_extrato)
             enviar_mensagem_whatsapp(remetente, mensagem_extrato)
