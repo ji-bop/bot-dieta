@@ -108,6 +108,8 @@ def webhook():
                 return jsonify({"status": "success"}), 200
                 
             linhas_extrato = ["📊 *Extrato do Dia*\n"]
+            total_dia = 0  # Variável para somar o total
+            
             for log in logs.data:
                 try:
                     hora_utc = datetime.fromisoformat(log['created_at'].replace('Z', '+00:00'))
@@ -115,12 +117,17 @@ def webhook():
                 except:
                     hora_str = "--:--"
                 
-                sinal = "+" if log['calorias'] > 0 else ""
+                calorias_log = int(log.get('calorias') or 0)
+                total_dia += calorias_log  # Somando na variável total
                 
-                # Formata a string de alimentos para pular linha e adicionar o traço
+                sinal = "+" if calorias_log > 0 else ""
+                
                 alimentos_formatados = log['alimento'].replace(", ", "\n  - ")
                 
-                linhas_extrato.append(f"• *{hora_str}* | {sinal}{log['calorias']} kcal\n  - {alimentos_formatados}\n")
+                linhas_extrato.append(f"• *{hora_str}* | {sinal}{calorias_log} kcal\n  - {alimentos_formatados}\n")
+                
+            # Adicionando a linha final com o saldo total
+            linhas_extrato.append(f"📈 *Total Consumido:* {total_dia} kcal")
                 
             mensagem_extrato = "\n".join(linhas_extrato)
             enviar_mensagem_whatsapp(remetente, mensagem_extrato)
